@@ -1,0 +1,51 @@
+- name: check whether apt packages are already installed
+  shell: dpkg-query --status mysql-server python-mysqldb
+  register: mysql_server_installed
+  changed_when: false
+  failed_when: false
+- name: install mysql
+  block:
+    - name: specify MySQL root password
+      debconf:
+        name: mysql-server
+        question: "{{ item }}"
+        value: "{{ mysql_root_password }}"
+        vtype: password
+      with_items:
+        - mysql-server/root_password
+        - mysql-server/root_password_again
+    - name: install apt packages
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - mysql-server
+        - python-mysqldb
+  when: mysql_server_installed.rc != 0
+- name: make sure ansible DB is present
+  mysql_db:
+    name: ansible
+    state: present
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+  register: db_status
+- name: create and populate DB
+  block:
+    - name: copy DB init script
+      copy:
+        src: /etc/ansible/roles/mysql/files/init.sql
+        dest: /tmp/
+    - name: run DB init script
+      mysql_db:
+        name: ansible
+        state: import
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        target: /tmp/init.sql
+    - name: remove DB init script
+      file:
+        path: /tmp/init.sql
+        state: absent
+  when: db_status.changed

@@ -1,0 +1,5 @@
+---
+- hosts: mysql
+  become: true
+  roles:
+  - mysql
